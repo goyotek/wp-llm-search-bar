@@ -490,3 +490,59 @@ class WP_LLM_Search_Indexer {
         ) === $this->table_name;
     }
 }
+
+    /**
+     * Generate and store embedding for a post (Phase 2)
+     * 
+     * @param int $post_id Post ID
+     */
+    public function generate_and_store_embedding($post_id) {
+        $indexed = $this->get_indexed_post($post_id);
+        if (!$indexed || empty($indexed->content_text)) {
+            return;
+        }
+        
+        // Check if we have a semantic search instance
+        if (class_exists('WP_LLM_Search_Semantic')) {
+            global $wp_llm_search_semantic;
+            if ($wp_llm_search_semantic) {
+                $embedding = $wp_llm_search_semantic->generate_embedding($indexed->content_text);
+                if (!empty($embedding)) {
+                    $this->wpdb->update(
+                        $this->table_name,
+                        ['content_embedding' => json_encode($embedding)],
+                        ['post_id' => $post_id]
+                    );
+                }
+            }
+        }
+    }
+}
+
+    /**
+     * Generate and store embedding for a post (Phase 2)
+     * 
+     * @param int $post_id Post ID
+     */
+    public function generate_and_store_embedding($post_id) {
+        $indexed = $this->get_indexed_post($post_id);
+        if (!$indexed || empty($indexed->content_text)) {
+            return;
+        }
+        
+        // Check if we have a semantic search instance
+        if (class_exists('WP_LLM_Search_Semantic')) {
+            global $wp_llm_search_semantic;
+            if ($wp_llm_search_semantic) {
+                $embedding = $wp_llm_search_semantic->generate_embedding($indexed->content_text);
+                if (!empty($embedding)) {
+                    $this->wpdb->update(
+                        $this->table_name,
+                        ['content_embedding' => json_encode($embedding)],
+                        ['post_id' => $post_id]
+                    );
+                }
+            }
+        }
+    }
+}

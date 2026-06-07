@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WP LLM Search Bar
  * Description: Ein Gutenberg-Block mit KI-basierter semantischer Suche für Anchor-Links.
- * Version: 1.3
+ * Version: 1.4
  * Author: GOYOTEK Communications e.U.
  * 
  * ANLEITUNG:
@@ -12,6 +12,8 @@
  * 4. Stelle sicher, dass ein KI-Konnektor in WordPress 7.0 konfiguriert ist (z. B. Mistral).
  */
 
+=======
+=======
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -23,11 +25,38 @@ define('WP_LLM_SEARCH_BAR_PLUGIN_FILE', __FILE__);
 // LOAD REQUIRED FILES
 // ============================================
 require_once plugin_dir_path(__FILE__) . 'includes/class-indexer.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-semantic-search.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-result-merger.php';
 
 // Initialize the indexer (Phase 1: Basic Indexing)
 $wp_llm_search_indexer = new WP_LLM_Search_Indexer();
 
+// Initialize semantic search (Phase 2)
+$wp_llm_search_semantic = new WP_LLM_Search_Semantic($wp_llm_search_indexer);
+
+// Initialize result merger (Phase 2)
+$wp_llm_search_result_merger = new WP_LLM_Search_Result_Merger();
+
+// ============================================Define plugin file constant for activation hooks
+define('WP_LLM_SEARCH_BAR_PLUGIN_FILE', __FILE__);
+
 // ============================================
+// LOAD REQUIRED FILES
+// ============================================
+require_once plugin_dir_path(__FILE__) . 'includes/class-indexer.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-semantic-search.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-result-merger.php';
+
+// Initialize the indexer (Phase 1: Basic Indexing)
+$wp_llm_search_indexer = new WP_LLM_Search_Indexer();
+
+// Initialize semantic search (Phase 2)
+$wp_llm_search_semantic = new WP_LLM_Search_Semantic($wp_llm_search_indexer);
+
+// Initialize result merger (Phase 2)
+$wp_llm_search_result_merger = new WP_LLM_Search_Result_Merger();
+
+// ========================================================================================
 // 1. BLOCK REGISTRATION
 // ============================================
 add_action('init', function() {
@@ -57,6 +86,10 @@ function wp_llm_search_bar_render($attributes) {
     ';
 
     $html = $styles;
+    
+    // Output nonce for frontend JavaScript
+    $html .= '<script>var wpLlmSearchBar = { nonce: "' . esc_js(wp_create_nonce('wp_rest')) . '" };</script>';
+    
     $html .= '<div class="wp-llm-search-bar" data-page-id="' . esc_attr(get_the_ID()) . '">';
     $html .= '<input type="text" class="llm-search-input" placeholder="Wonach interessierst du dich?" />';
     $html .= '<div class="llm-search-results"></div>';
@@ -118,7 +151,7 @@ function wp_llm_search_bar_render($attributes) {
                             .map(r => `
                                 <div class="llm-search-result-item">
                                     <a href="#${r.id}" 
-                                       onclick="event.preventDefault(); document.getElementById('${r.id}').scrollIntoView({behavior: 'smooth'});"
+                                       onclick="event.preventDefault(); document.getElementById(\'${r.id}\').scrollIntoView({behavior: \'smooth\'});"
                                        class="llm-search-result-link">
                                         ${r.text || r.id}
                                     </a>
@@ -161,7 +194,7 @@ add_action('rest_api_init', function() {
             ],
             'mode' => [
                 'type' => 'string',
-                'enum' => ['ai', 'keyword', 'hybrid'],
+                'enum' => ['ai', 'keyword', 'hybrid', 'semantic'],
                 'default' => 'hybrid',
             ],
             'scope' => [
@@ -174,13 +207,13 @@ add_action('rest_api_init', function() {
 });
 
 /**
- * Enhanced search endpoint with keyword fallback (Phase 1)
+ * Enhanced search endpoint with keyword, semantic, and AI fallback (Phase 2)
  * 
  * @param WP_REST_Request $request REST request object
  * @return WP_REST_Response Response with search results
  */
 function wp_llm_search_bar_endpoint(WP_REST_Request $request) {
-    global $wp_llm_search_indexer;
+    global $wp_llm_search_indexer, $wp_llm_search_semantic, $wp_llm_search_result_merger;
     
     $query = sanitize_text_field($request->get_param('query'));
     $page_id = absint($request->get_param('page_id'));
@@ -194,13 +227,13 @@ function wp_llm_search_bar_endpoint(WP_REST_Request $request) {
     // Generate cache key
     $cache_key = 'llm_search_' . md5($query . $page_id . $mode . $scope);
     
-    // Check cache first
+    // Check cache first (Phase 2: Multi-layer caching)
     $cached = get_transient($cache_key);
     if ($cached !== false) {
         return new WP_REST_Response(['results' => $cached], 200);
     }
 
-    $results = [];
+    $search_sources = [];
     
     // Try keyword search first if mode is keyword or hybrid
     if ($mode === 'keyword' || $mode === 'hybrid') {
@@ -213,21 +246,30 @@ function wp_llm_search_bar_endpoint(WP_REST_Request $request) {
         
         // If we have keyword results, use them
         if (!empty($keyword_results)) {
-            $results = $keyword_results;
+            $search_sources['keyword'] = $keyword_results;
             
             // If mode is keyword-only, return now
             if ($mode === 'keyword') {
-                set_transient($cache_key, $results, 300); // Cache for 5 minutes
-                return new WP_REST_Response(['results' => $results], 200);
+                set_transient($cache_key, $keyword_results, 300); // Cache for 5 minutes
+                return new WP_REST_Response(['results' => $keyword_results], 200);
             }
         }
     }
 
-    // Fall back to AI search if:
-    // - Mode is 'ai'
-    // - Mode is 'hybrid' and keyword results are insufficient (< 3)
-    // - No indexer available
-    if ($mode === 'ai' || ($mode === 'hybrid' && count($results) < 3) || empty($results)) {
+    // Try semantic search if mode is semantic or hybrid
+    if ($mode === 'semantic' || $mode === 'hybrid') {
+        if ($wp_llm_search_semantic) {
+            $semantic_results = $wp_llm_search_semantic->semantic_search($query, $scope, $page_id, 20);
+            if (!empty($semantic_results)) {
+                $search_sources['semantic'] = $semantic_results;
+            }
+        }
+    }
+
+    // Fall back to traditional AI search if:
+    // - Mode is 'ai' or 'hybrid' and we have insufficient results
+    // - No semantic search available
+    if (($mode === 'ai' || ($mode === 'hybrid' && count($search_sources) < 1)) || empty($search_sources)) {
         // Get content based on scope
         if ($scope === 'page' && $page_id) {
             $content = get_post_field('post_content', $page_id);
@@ -279,8 +321,11 @@ function wp_llm_search_bar_endpoint(WP_REST_Request $request) {
 
         // Error handling
         if (is_wp_error($result)) {
-            // If we have keyword results, return those
-            if (!empty($results)) {
+            // If we have other results, return those
+            if (!empty($search_sources)) {
+                $results = $wp_llm_search_result_merger->merge($search_sources);
+                $results = $wp_llm_search_result_merger->apply_threshold($results, 0.05);
+                $results = $wp_llm_search_result_merger->limit($results, 20);
                 set_transient($cache_key, $results, 300);
                 return new WP_REST_Response(['results' => $results], 200);
             }
@@ -303,7 +348,7 @@ function wp_llm_search_bar_endpoint(WP_REST_Request $request) {
             }
         }
 
-        // Filter relevant sections
+        // Filter relevant sections and add to results
         $ai_results = array_filter($sections, function($section) use ($section_ids) {
             return in_array($section['id'], $section_ids);
         });
@@ -320,13 +365,20 @@ function wp_llm_search_bar_endpoint(WP_REST_Request $request) {
             return $a_pos <=> $b_pos;
         });
 
-        // Merge AI results with keyword results (for hybrid mode)
-        if ($mode === 'hybrid' && !empty($results)) {
-            $results = wp_llm_search_bar_merge_results($results, array_values($ai_results));
-        } else {
-            $results = array_values($ai_results);
-        }
+        // Add AI results to sources
+        $search_sources['ai'] = array_values($ai_results);
     }
+
+    // Merge all results using the result merger
+    if (!empty($search_sources)) {
+        $results = $wp_llm_search_result_merger->merge($search_sources);
+    } else {
+        $results = [];
+    }
+    
+    // Apply threshold and limit
+    $results = $wp_llm_search_result_merger->apply_threshold($results, 0.05);
+    $results = $wp_llm_search_result_merger->limit($results, 20);
 
     // Cache results for 5 minutes
     set_transient($cache_key, $results, 300);
@@ -334,132 +386,6 @@ function wp_llm_search_bar_endpoint(WP_REST_Request $request) {
     return new WP_REST_Response(['results' => $results], 200);
 }
 
-/**
- * Merge keyword and AI search results
- * 
- * @param array $keyword_results Keyword search results
- * @param array $ai_results AI search results
- * @return array Merged and deduplicated results
- */
-function wp_llm_search_bar_merge_results($keyword_results, $ai_results) {
-    $merged = [];
-    $seen_ids = [];
-    
-    // Add AI results first (higher priority)
-    foreach ($ai_results as $result) {
-        if (!isset($seen_ids[$result['id']])) {
-            $seen_ids[$result['id']] = true;
-            $result['source'] = 'ai';
-            $merged[] = $result;
-        }
-    }
-    
-    // Add keyword results (lower priority)
-    foreach ($keyword_results as $result) {
-        if (!isset($seen_ids[$result['id']])) {
-            $seen_ids[$result['id']] = true;
-            $result['source'] = 'keyword';
-            $merged[] = $result;
-        }
-    }
-    
-    return $merged;
-}
-
-// ============================================
-// 4. VERBESSERTE HELPER FUNCTION: Abschnitte mit Kontext extrahieren
-// ============================================
-
-// ============================================
-// 4. VERBESSERTE HELPER FUNCTION: Abschnitte mit Kontext extrahieren
-// ============================================
-function extract_sections_with_context($html) {
-    $dom = new DOMDocument();
-    @$dom->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
-    $xpath = new DOMXPath($dom);
-    $sections = [];
-
-    // 1. Alle Elemente mit ID-Attribut + Textinhalt
-    foreach ($xpath->query('//*[@id]') as $node) {
-        $text = trim($node->nodeValue);
-        if (empty($text)) {
-            // Falls kein direkter Text, versuche Kind-Elemente
-            $text = trim($node->textContent);
-        }
-        
-        $sections[] = [
-            'id' => $node->getAttribute('id'),
-            'text' => $text,
-            'tag' => $node->nodeName,
-            'context' => get_section_context($node, $xpath), // Zusätzlicher Kontext
-        ];
-    }
-
-    // 2. Alle <a>-Tags mit name-Attribut
-    foreach ($xpath->query('//a[@name]') as $node) {
-        $id = $node->getAttribute('name');
-        $text = trim($node->nodeValue);
-        if (empty($text)) {
-            $text = trim($node->textContent);
-        }
-        
-        if (!in_array($id, array_column($sections, 'id'))) {
-            $sections[] = [
-                'id' => $id,
-                'text' => $text,
-                'tag' => 'a',
-                'context' => get_section_context($node, $xpath),
-            ];
-        }
-    }
-
-    // 3. Überschriften ohne ID, aber mit Text
-    $headings = $xpath->query('//h1 | //h2 | //h3 | //h4 | //h5 | //h6');
-    foreach ($headings as $heading) {
-        $text = trim($heading->nodeValue);
-        if (!empty($text)) {
-            $id = sanitize_title($text);
-            if (!in_array($id, array_column($sections, 'id'))) {
-                $sections[] = [
-                    'id' => $id,
-                    'text' => $text,
-                    'tag' => $heading->nodeName,
-                    'context' => get_section_context($heading, $xpath),
-                ];
-            }
-        }
-    }
-
-    return $sections;
-}
-
-// ============================================
-// 5. HELPER: Zusätzlichen Kontext für Abschnitte extrahieren
-// ============================================
-function get_section_context($node, $xpath) {
-    // Hole den Text der nächsten 2 Geschwister-Elemente für mehr Kontext
-    $context = [];
-    $next = $node->nextSibling;
-    for ($i = 0; $i < 2 && $next !== null; $i++) {
-        if ($next instanceof DOMElement) {
-            $text = trim($next->textContent);
-            if (!empty($text)) {
-                $context[] = $text;
-            }
-        }
-        $next = $next->nextSibling;
-    }
-    
-    // Hole den Text des Eltern-Elements
-    if ($node->parentNode instanceof DOMElement) {
-        $parentText = trim($node->parentNode->textContent);
-        if (!empty($parentText) && !in_array($parentText, $context)) {
-            $context[] = $parentText;
-        }
-    }
-    
-    return implode(' ', array_slice($context, 0, 3));
-}
 // ============================================
 // 4. VERBESSERTE HELPER FUNCTION: Abschnitte mit Kontext extrahieren
 // ============================================
