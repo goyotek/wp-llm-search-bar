@@ -1,13 +1,13 @@
 <?php
 /**
- * Plugin Name: LLM Anchor Search
+ * Plugin Name: WP LLM Search Bar
  * Description: Ein Gutenberg-Block mit KI-basierter semantischer Suche für Anchor-Links.
  * Version: 1.2
  * Author: GOYOTEK Communications e.U.
  * 
  * ANLEITUNG:
- * 1. Erstelle den Ordner: /wp-content/plugins/llm-anchor-search/
- * 2. Speichere diese Datei als: llm-anchor-search.php
+ * 1. Erstelle den Ordner: /wp-content/plugins/wp-llm-search-bar/
+ * 2. Speichere diese Datei als: wp-llm-search-bar.php
  * 3. Aktiviere das Plugin im WordPress-Dashboard.
  * 4. Stelle sicher, dass ein KI-Konnektor in WordPress 7.0 konfiguriert ist (z. B. Mistral).
  */
@@ -20,8 +20,8 @@ if (!defined('ABSPATH')) {
 // 1. BLOCK REGISTRATION
 // ============================================
 add_action('init', function() {
-    register_block_type('llm-anchor-search/anchor-search', [
-        'render_callback' => 'llm_anchor_search_render',
+    register_block_type('wp-llm-search-bar/anchor-search', [
+        'render_callback' => 'wp_llm_search_bar_render',
         'attributes'      => [],
     ]);
 });
@@ -29,10 +29,10 @@ add_action('init', function() {
 // ============================================
 // 2. BLOCK RENDER
 // ============================================
-function llm_anchor_search_render($attributes) {
+function wp_llm_search_bar_render($attributes) {
     $styles = '
         <style>
-            .llm-anchor-search { margin: 20px 0; max-width: 600px; }
+            .wp-llm-search-bar { margin: 20px 0; max-width: 600px; }
             .llm-search-input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px; }
             .llm-search-results { margin-top: 15px; }
             .llm-search-result-item { margin: 8px 0; padding: 10px; background: #f9f9f9; border-left: 3px solid #0073aa; }
@@ -46,7 +46,7 @@ function llm_anchor_search_render($attributes) {
     ';
 
     $html = $styles;
-    $html .= '<div class="llm-anchor-search" data-page-id="' . esc_attr(get_the_ID()) . '">';
+    $html .= '<div class="wp-llm-search-bar" data-page-id="' . esc_attr(get_the_ID()) . '">';
     $html .= '<input type="text" class="llm-search-input" placeholder="Wonach interessierst du dich?" />';
     $html .= '<div class="llm-search-results"></div>';
     $html .= '</div>';
@@ -55,7 +55,7 @@ function llm_anchor_search_render($attributes) {
     $html .= '
     <script>
     document.addEventListener("DOMContentLoaded", function() {
-        const searchWrappers = document.querySelectorAll(".llm-anchor-search");
+        const searchWrappers = document.querySelectorAll(".wp-llm-search-bar");
         
         searchWrappers.forEach(function(wrapper) {
             const input = wrapper.querySelector(".llm-search-input");
@@ -83,7 +83,7 @@ function llm_anchor_search_render($attributes) {
                 results.innerHTML = "<p class=\"llm-search-loading\">🔍 Suche mit KI...</p>";
 
                 try {
-                    const response = await fetch("/wp-json/llm-anchor-search/v1/search", {
+                    const response = await fetch("/wp-json/wp-llm-search-bar/v1/search", {
                         method: "POST",
                         headers: {
                             "Content-Type": "application/json",
@@ -134,14 +134,14 @@ function llm_anchor_search_render($attributes) {
 // 3. REST API ENDPOINT MIT VERBESSERTER KI-SUCHE
 // ============================================
 add_action('rest_api_init', function() {
-    register_rest_route('llm-anchor-search/v1', '/search', [
+    register_rest_route('wp-llm-search-bar/v1', '/search', [
         'methods'  => 'POST',
-        'callback' => 'llm_anchor_search_endpoint',
+        'callback' => 'wp_llm_search_bar_endpoint',
         'permission_callback' => '__return_true',
     ]);
 });
 
-function llm_anchor_search_endpoint(WP_REST_Request $request) {
+function wp_llm_search_bar_endpoint(WP_REST_Request $request) {
     $query = sanitize_text_field($request->get_param('query'));
     $page_id = absint($request->get_param('page_id'));
 

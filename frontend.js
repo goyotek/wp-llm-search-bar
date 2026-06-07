@@ -4,7 +4,7 @@
 // ============================================
 
 document.addEventListener('DOMContentLoaded', function() {
-    const searchWrappers = document.querySelectorAll('.llm-anchor-search');
+    const searchWrappers = document.querySelectorAll('.wp-llm-search-bar');
     
     if (searchWrappers.length === 0) return;
 

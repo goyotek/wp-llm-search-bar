@@ -7,8 +7,8 @@
     const { registerBlockType } = wp.blocks;
     const { createElement } = wp.element;
 
-    registerBlockType( 'llm-anchor-search/anchor-search', {
-        title: 'LLM Anchor Search',
+    registerBlockType( 'wp-llm-search-bar/anchor-search', {
+        title: 'WP LLM Search Bar',
         icon: 'search',
         category: 'widgets',
         attributes: {},
@@ -16,7 +16,7 @@
             return createElement(
                 'div',
                 {
-                    className: 'llm-anchor-search-editor',
+                    className: 'wp-llm-search-bar-editor',
                     style: {
                         padding: '20px',
                         border: '1px dashed #a0a0a0',
@@ -24,7 +24,7 @@
                         textAlign: 'center'
                     }
                 },
-                createElement( 'p', null, 'LLM Anchor Search Block' ),
+                createElement( 'p', null, 'WP LLM Search Bar Block' ),
                 createElement( 'p', { style: { fontSize: '0.8em', color: '#666' } }, 'Wird im Frontend als Suchfeld angezeigt' )
             );
         },
