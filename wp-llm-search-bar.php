@@ -12,8 +12,6 @@
  * 4. Stelle sicher, dass ein KI-Konnektor in WordPress 7.0 konfiguriert ist (z. B. Mistral).
  */
 
-=======
-=======
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -37,26 +35,7 @@ $wp_llm_search_semantic = new WP_LLM_Search_Semantic($wp_llm_search_indexer);
 // Initialize result merger (Phase 2)
 $wp_llm_search_result_merger = new WP_LLM_Search_Result_Merger();
 
-// ============================================Define plugin file constant for activation hooks
-define('WP_LLM_SEARCH_BAR_PLUGIN_FILE', __FILE__);
-
 // ============================================
-// LOAD REQUIRED FILES
-// ============================================
-require_once plugin_dir_path(__FILE__) . 'includes/class-indexer.php';
-require_once plugin_dir_path(__FILE__) . 'includes/class-semantic-search.php';
-require_once plugin_dir_path(__FILE__) . 'includes/class-result-merger.php';
-
-// Initialize the indexer (Phase 1: Basic Indexing)
-$wp_llm_search_indexer = new WP_LLM_Search_Indexer();
-
-// Initialize semantic search (Phase 2)
-$wp_llm_search_semantic = new WP_LLM_Search_Semantic($wp_llm_search_indexer);
-
-// Initialize result merger (Phase 2)
-$wp_llm_search_result_merger = new WP_LLM_Search_Result_Merger();
-
-// ========================================================================================
 // 1. BLOCK REGISTRATION
 // ============================================
 add_action('init', function() {
@@ -94,82 +73,6 @@ function wp_llm_search_bar_render($attributes) {
     $html .= '<input type="text" class="llm-search-input" placeholder="Wonach interessierst du dich?" />';
     $html .= '<div class="llm-search-results"></div>';
     $html .= '</div>';
-
-    // Inline-JavaScript
-    $html .= '
-    <script>
-    document.addEventListener("DOMContentLoaded", function() {
-        const searchWrappers = document.querySelectorAll(".wp-llm-search-bar");
-        
-        searchWrappers.forEach(function(wrapper) {
-            const input = wrapper.querySelector(".llm-search-input");
-            const results = wrapper.querySelector(".llm-search-results");
-            const pageId = wrapper.dataset.pageId || 0;
-
-            if (!input || !results) return;
-
-            let timeout;
-            input.addEventListener("input", function() {
-                clearTimeout(timeout);
-                timeout = setTimeout(function() {
-                    performSearch(input, results, pageId);
-                }, 500);
-            });
-
-            async function performSearch(input, results, pageId) {
-                const query = input.value.trim();
-                
-                if (query.length < 2) {  // Reduziert auf 2 Zeichen für bessere UX
-                    results.innerHTML = "<p class=\"llm-search-hint\">Geben Sie mindestens 2 Zeichen ein...</p>";
-                    return;
-                }
-
-                results.innerHTML = "<p class=\"llm-search-loading\">🔍 Suche mit KI...</p>";
-
-                try {
-                    const response = await fetch("/wp-json/wp-llm-search-bar/v1/search", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "X-WP-Nonce": "' . wp_create_nonce('wp_rest') . '"
-                        },
-                        body: JSON.stringify({
-                            query: query,
-                            page_id: pageId
-                        })
-                    });
-
-                    const data = await response.json();
-                    
-                    if (data.error) {
-                        results.innerHTML = `<p class="llm-search-error">❌ Fehler: ${data.error}</p>`;
-                        return;
-                    }
-
-                    if (data.results && data.results.length > 0) {
-                        results.innerHTML = data.results
-                            .map(r => `
-                                <div class="llm-search-result-item">
-                                    <a href="#${r.id}" 
-                                       onclick="event.preventDefault(); document.getElementById(\'${r.id}\').scrollIntoView({behavior: \'smooth\'});"
-                                       class="llm-search-result-link">
-                                        ${r.text || r.id}
-                                    </a>
-                                    <span class="llm-search-result-tag">(${r.tag || "section"})</span>
-                                </div>
-                            `)
-                            .join("");
-                    } else {
-                        results.innerHTML = "<p class=\"llm-search-hint\">Keine passenden Abschnitte gefunden.</p>";
-                    }
-                } catch (error) {
-                    results.innerHTML = `<p class="llm-search-error">❌ Netzwerkfehler: ${error.message}</p>`;
-                }
-            }
-        });
-    });
-    </script>
-    ';
 
     return $html;
 }
