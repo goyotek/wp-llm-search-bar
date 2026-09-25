@@ -1,65 +1,148 @@
 // ============================================
-// DATEI: js/frontend.js
-// Frontend-Logik für das Suchfeld
+// DATEI: frontend.js
+// Frontend-Logik: ruft den REST-Endpunkt auf und rendert
+// die KI-Antwort, die Quellenliste und den optionalen CTA.
 // ============================================
 
-document.addEventListener('DOMContentLoaded', function() {
-    const searchWrappers = document.querySelectorAll('.wp-llm-search-bar');
-    
-    if (searchWrappers.length === 0) return;
+(function () {
+    'use strict';
 
-    searchWrappers.forEach(function(wrapper) {
-        const input = wrapper.querySelector('.llm-search-input');
-        const results = wrapper.querySelector('.llm-search-results');
-        const pageId = wrapper.dataset.pageId || 0;
+    document.addEventListener('DOMContentLoaded', function () {
+        var wrappers = document.querySelectorAll('.wp-llm-search-bar');
+        Array.prototype.forEach.call(wrappers, function (wrapper) {
+            init(wrapper);
+        });
+    });
 
-        if (!input || !results) return;
+    function init(wrapper) {
+        var form = wrapper.querySelector('.llm-search-form');
+        var input = wrapper.querySelector('.llm-search-input');
+        var results = wrapper.querySelector('.llm-search-results');
+        if (!form || !input || !results) return;
 
-        let timeout;
-        input.addEventListener('input', function() {
+        var inFlight = null;
+        var timeout = null;
+
+        input.addEventListener('input', function () {
             clearTimeout(timeout);
-            timeout = setTimeout(function() {
-                performSearch(input, results, pageId);
-            }, 500);
+            timeout = setTimeout(function () {
+                search(input, results);
+            }, 600);
         });
 
-        function performSearch(input, results, pageId) {
-            const query = input.value.trim();
-            
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            clearTimeout(timeout);
+            search(input, results);
+        });
+
+        function search(input, results) {
+            var query = input.value.trim();
             if (query.length < 3) {
-                results.innerHTML = '<p style="color: #666; font-style: italic;">Geben Sie mindestens 3 Zeichen ein...</p>';
+                results.innerHTML = '<p class="llm-search-hint">Bitte mindestens 3 Zeichen eingeben …</p>';
+                return;
+            }
+            if (inFlight && inFlight.abort) {
+                inFlight.abort();
+            }
+
+            results.innerHTML = '<p class="llm-search-loading">🔍 Suche mit KI …</p>';
+
+            var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            var body = JSON.stringify({
+                query: query,
+                page_id: parseInt(wrapper.dataset.pageId, 10) || 0,
+                maxSources: parseInt(wrapper.dataset.maxSources, 10) || 3,
+                mode: wrapper.dataset.mode || 'answer',
+                ctaText: wrapper.dataset.ctaText || '',
+                ctaEmail: wrapper.dataset.ctaEmail || '',
+                ctaSubject: wrapper.dataset.ctaSubject || ''
+            });
+
+            fetch('/wp-json/wp-llm-search-bar/v1/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: body,
+                signal: controller ? controller.signal : undefined
+            })
+                .then(function (response) {
+                    if (!response.ok) {
+                        return response.json().then(function (data) {
+                            throw new Error((data && data.message) || ('HTTP ' + response.status));
+                        });
+                    }
+                    return response.json();
+                })
+                .then(function (data) {
+                    render(results, data);
+                })
+                .catch(function (error) {
+                    if (error && error.name === 'AbortError') return;
+                    results.innerHTML = '<p class="llm-search-error">❌ Fehler: ' + escapeHtml(error.message) + '</p>';
+                });
+
+            inFlight = controller;
+        }
+
+        function render(results, data) {
+            if (data.error) {
+                results.innerHTML = '<p class="llm-search-error">❌ ' + escapeHtml(data.error) + '</p>';
                 return;
             }
 
-            results.innerHTML = '<p style="color: #0073aa;">🔍 Suche...</p>';
+            var hasAnswer = data.answer && data.answer.trim().length > 0;
+            var hasSources = data.sources && data.sources.length > 0;
 
-            // Demo-Modus: Suche nach Elementen mit IDs auf der Seite
-            const allElements = document.querySelectorAll('[id]');
-            const matchingElements = [];
+            if (!hasAnswer && !hasSources) {
+                results.innerHTML = '<p class="llm-search-hint">' + escapeHtml(data.message || 'Keine passenden Inhalte gefunden.') + '</p>';
+                return;
+            }
 
-            allElements.forEach(function(el) {
-                if (el.id.toLowerCase().includes(query.toLowerCase())) {
-                    matchingElements.push({
-                        id: el.id,
-                        text: el.textContent ? el.textContent.substring(0, 50) : el.id
-                    });
-                }
-            });
+            var html = '';
 
-            if (matchingElements.length > 0) {
-                let html = '';
-                matchingElements.forEach(function(el) {
-                    html += '<div style="margin: 8px 0; padding: 8px; border-bottom: 1px solid #eee;">';
-                    html += '<a href="#' + el.id + '" onclick="event.preventDefault(); document.getElementById(\'' + el.id + '\').scrollIntoView({behavior: \'smooth\'});" style="color: #0073aa; text-decoration: none; font-weight: bold;">';
-                    html += el.text || el.id;
-                    html += '</a>';
-                    html += '<span style="color: #666; font-size: 0.8em; margin-left: 10px;">(#' + el.id + ')</span>';
+            if (hasAnswer) {
+                html += '<div class="llm-search-answer">' + renderAnswer(data.answer) + '</div>';
+            }
+
+            if (hasSources) {
+                html += '<div class="llm-search-sources">';
+                html += '<p class="llm-search-sources-title">Quellen</p>';
+                data.sources.forEach(function (source) {
+                    html += '<div class="llm-search-source">';
+                    html += '<a class="llm-search-source-link" href="' + escapeHtml(source.url) + '">' + escapeHtml(source.title) + '</a>';
+                    html += '<span class="llm-search-source-url">' + escapeHtml(source.url) + '</span>';
                     html += '</div>';
                 });
-                results.innerHTML = html;
-            } else {
-                results.innerHTML = '<p style="color: #666;">Keine passenden Abschnitte gefunden.</p>';
+                html += '</div>';
             }
+
+            if (data.cta && data.cta.email) {
+                html += '<div class="llm-search-cta">';
+                if (data.cta.text) {
+                    html += '<p>' + escapeHtml(data.cta.text) + '</p>';
+                }
+                var subject = data.cta.subject || '';
+                var href = 'mailto:' + data.cta.email + (subject ? '?subject=' + encodeURIComponent(subject) : '');
+                html += '<a class="llm-search-cta-link" href="' + escapeHtml(href) + '">Jetzt Kontakt aufnehmen</a>';
+                html += '</div>';
+            }
+
+            results.innerHTML = html;
         }
-    });
-});
+
+        function renderAnswer(answer) {
+            var paragraphs = answer.split(/\n{2,}/).filter(function (part) {
+                return part.trim().length > 0;
+            });
+            return paragraphs.map(function (part) {
+                return '<p>' + escapeHtml(part.trim()) + '</p>';
+            }).join('');
+        }
+
+        function escapeHtml(value) {
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(value || ''));
+            return div.innerHTML;
+        }
+    }
+})();
