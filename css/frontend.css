@@ -1,0 +1,113 @@
+.wp-llm-search-bar {
+    margin: 20px 0;
+    max-width: 640px;
+}
+
+.wp-llm-search-bar .llm-search-form {
+    display: flex;
+    gap: 8px;
+}
+
+.wp-llm-search-bar .llm-search-input {
+    flex: 1;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 16px;
+}
+
+.wp-llm-search-bar .llm-search-button {
+    padding: 12px 18px;
+    border: 0;
+    border-radius: 4px;
+    background: #0073aa;
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.wp-llm-search-bar .llm-search-button:hover {
+    background: #005a87;
+}
+
+.wp-llm-search-bar .llm-search-results {
+    margin-top: 15px;
+}
+
+.wp-llm-search-bar .llm-search-hint {
+    color: #666;
+    font-style: italic;
+}
+
+.wp-llm-search-bar .llm-search-loading {
+    color: #0073aa;
+}
+
+.wp-llm-search-bar .llm-search-error {
+    color: #d63638;
+}
+
+.wp-llm-search-bar .llm-search-answer {
+    font-size: 1em;
+    line-height: 1.6;
+}
+
+.wp-llm-search-bar .llm-search-answer p {
+    margin: 0 0 0.75em;
+}
+
+.wp-llm-search-bar .llm-search-sources {
+    margin: 12px 0 0;
+    padding: 12px;
+    background: #f9f9f9;
+    border-left: 3px solid #0073aa;
+}
+
+.wp-llm-search-bar .llm-search-sources-title {
+    font-weight: 600;
+    margin: 0 0 8px;
+}
+
+.wp-llm-search-bar .llm-search-source {
+    margin: 6px 0;
+}
+
+.wp-llm-search-bar .llm-search-source-link {
+    color: #0073aa;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.wp-llm-search-bar .llm-search-source-link:hover {
+    text-decoration: underline;
+}
+
+.wp-llm-search-bar .llm-search-source-url {
+    display: block;
+    color: #666;
+    font-size: 0.85em;
+    word-break: break-all;
+}
+
+.wp-llm-search-bar .llm-search-cta {
+    margin: 15px 0 0;
+    padding: 12px;
+    background: #f0f7fb;
+    border: 1px solid #cfe8f5;
+    border-radius: 4px;
+}
+
+.wp-llm-search-bar .llm-search-cta-link {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 8px 14px;
+    background: #0073aa;
+    color: #fff;
+    border-radius: 4px;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.wp-llm-search-bar .llm-search-cta-link:hover {
+    background: #005a87;
+}
